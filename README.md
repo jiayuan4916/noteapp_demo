@@ -9,6 +9,7 @@ A modern, responsive web application for managing personal notes with a beautifu
 - **Delete Notes**: Remove notes you no longer need
 - **Search Notes**: Find notes quickly by searching titles and content
 - **Auto-save**: Notes are automatically saved as you type
+- **Translation**: Replace saved notes with Simplified Chinese or Japanese translations
 - **Responsive Design**: Works perfectly on desktop and mobile devices
 - **Modern UI**: Beautiful gradient design with smooth animations
 - **Real-time Updates**: Instant feedback and updates
@@ -79,12 +80,19 @@ notetaking-app/
    pip install -r requirements.txt
    ```
 
-4. **Run the application**
+4. **Configure translation**
+   ```bash
+   cp .env.example .env
+   ```
+
+   Set `OPENROUTER_API_KEY` in `.env`. This file is ignored by Git and the key is used only by the Flask backend.
+
+5. **Run the application**
    ```bash
    python src/main.py
    ```
 
-5. **Access the application**
+6. **Access the application**
    - Open your browser and go to `http://localhost:5001`
 
 ## 📡 API Endpoints
@@ -96,6 +104,17 @@ notetaking-app/
 - `PUT /api/notes/<id>` - Update a note
 - `DELETE /api/notes/<id>` - Delete a note
 - `GET /api/notes/search?q=<query>` - Search notes
+- `POST /api/notes/<id>/translate` - Translate a saved note preview
+
+Translation requests accept `zh` for Simplified Chinese or `ja` for Japanese:
+
+```json
+{
+   "target_language": "ja"
+}
+```
+
+The response contains the saved translated `title` and `content` fields. Translation replaces the original note and is persisted immediately.
 
 ### Request/Response Format
 ```json
@@ -156,6 +175,7 @@ The application is configured for easy deployment with:
 ### Environment Variables
 - `FLASK_ENV`: Set to `development` for debug mode
 - `SECRET_KEY`: Flask secret key for sessions
+- `OPENROUTER_API_KEY`: API key used by the backend translation preview
 
 ### Database Configuration
 - Database file: `src/database/app.db`

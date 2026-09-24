@@ -243,6 +243,55 @@
             border-color: #667eea;
         }
 
+        .translation-panel {
+            margin-top: 10px;
+            padding-top: 20px;
+            border-top: 2px solid #e1e5e9;
+        }
+
+        .translation-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .translation-select {
+            flex: 1;
+            padding: 9px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .translation-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-translate {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-translate:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            cursor: wait;
+            opacity: 0.65;
+            transform: none;
+        }
+
+        .translation-status {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -361,6 +410,18 @@
                         <label class="form-label" for="noteContent">Content</label>
                         <textarea class="form-textarea" id="noteContent" placeholder="Start writing your note..."></textarea>
                     </div>
+
+                    <div class="translation-panel">
+                        <label class="form-label" for="translationLanguage">Replace note with translation</label>
+                        <div class="translation-controls">
+                            <select class="translation-select" id="translationLanguage">
+                                <option value="zh">Simplified Chinese</option>
+                                <option value="ja">Japanese</option>
+                            </select>
+                            <button class="btn btn-translate" id="translateBtn">Translate</button>
+                        </div>
+                        <div class="translation-status" id="translationStatus" aria-live="polite"></div>
+                    </div>
                 </div>
 
                 <div class="empty-state" id="emptyState">
@@ -389,11 +450,13 @@
                 document.getElementById('newNoteBtn').addEventListener('click', () => this.createNewNote());
                 document.getElementById('saveBtn').addEventListener('click', () => this.saveNote());
                 document.getElementById('deleteBtn').addEventListener('click', () => this.deleteNote());
+                document.getElementById('translateBtn').addEventListener('click', () => this.translateNote());
                 document.getElementById('searchBox').addEventListener('input', (e) => this.searchNotes(e.target.value));
                 
                 // Auto-save on content change (debounced)
                 let saveTimeout;
                 const autoSave = () => {
+                    this.clearTranslation();
                     clearTimeout(saveTimeout);
                     saveTimeout = setTimeout(() => {
                         if (this.currentNote && this.currentNote.id) {
@@ -404,6 +467,10 @@
                 
                 document.getElementById('noteTitle').addEventListener('input', autoSave);
                 document.getElementById('noteContent').addEventListener('input', autoSave);
+            }
+
+            clearTranslation() {
+                document.getElementById('translationStatus').textContent = '';
             }
 
             async loadNotes() {
@@ -453,6 +520,7 @@
                 document.getElementById('noteTitle').value = note.title || '';
                 document.getElementById('noteContent').value = note.content || '';
                 document.getElementById('editorTitle').textContent = note.title || 'Untitled Note';
+                this.clearTranslation();
             }
 
             createNewNote() {
@@ -468,6 +536,7 @@
                 document.getElementById('noteTitle').value = '';
                 document.getElementById('noteContent').value = '';
                 document.getElementById('editorTitle').textContent = 'New Note';
+                this.clearTranslation();
                 document.getElementById('noteTitle').focus();
                 
                 // Remove active state from all notes
@@ -487,7 +556,47 @@
                 document.getElementById('editorForm').style.display = 'none';
                 document.getElementById('editorActions').style.display = 'none';
                 document.getElementById('editorTitle').textContent = 'Select a note to edit';
+                this.clearTranslation();
                 this.currentNote = null;
+            }
+
+            async translateNote() {
+                if (!this.currentNote || !this.currentNote.id) {
+                    this.showMessage('Save the note before translating it.', 'error');
+                    return;
+                }
+
+                const translateButton = document.getElementById('translateBtn');
+                const targetLanguage = document.getElementById('translationLanguage').value;
+                const status = document.getElementById('translationStatus');
+                translateButton.disabled = true;
+                status.textContent = 'Translating...';
+
+                try {
+                    const response = await fetch(`/api/notes/${this.currentNote.id}/translate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_language: targetLanguage })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Translation failed');
+
+                    this.currentNote = result;
+                    const noteIndex = this.notes.findIndex(note => note.id === result.id);
+                    if (noteIndex >= 0) {
+                        this.notes[noteIndex] = result;
+                    }
+                    document.getElementById('noteTitle').value = result.title;
+                    document.getElementById('noteContent').value = result.content;
+                    document.getElementById('editorTitle').textContent = result.title;
+                    this.renderNotesList();
+                    status.textContent = `Note replaced with ${targetLanguage === 'zh' ? 'Simplified Chinese' : 'Japanese'} translation`;
+                } catch (error) {
+                    status.textContent = '';
+                    this.showMessage(`Error translating note: ${error.message}`, 'error');
+                } finally {
+                    translateButton.disabled = false;
+                }
             }
 
             async saveNote(isAutoSave = false) {

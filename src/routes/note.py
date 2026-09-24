@@ -1,5 +1,11 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from src.models.note import Note, db
+from src.services.translation import (
+    SUPPORTED_LANGUAGES,
+    TranslationConfigurationError,
+    TranslationProviderError,
+    translate_note,
+)
 
 note_bp = Blueprint('note', __name__)
 
@@ -45,6 +51,39 @@ def get_note(note_id):
     """Get a specific note by ID"""
     note = Note.query.get_or_404(note_id)
     return jsonify(note.to_dict())
+
+
+@note_bp.route('/notes/<int:note_id>/translate', methods=['POST'])
+def translate_note_route(note_id):
+    """Translate and replace a stored note."""
+    note = Note.query.get_or_404(note_id)
+    data = request.get_json(silent=True) or {}
+    target_language = data.get('target_language')
+
+    if target_language not in SUPPORTED_LANGUAGES:
+        return jsonify({'error': 'Target language must be zh or ja'}), 400
+
+    try:
+        translation = translate_note(
+            note.title,
+            note.content,
+            target_language,
+            api_key=current_app.config.get('OPENROUTER_API_KEY') or '',
+        )
+        note.title = translation['title']
+        note.content = translation['content']
+        db.session.commit()
+        return jsonify({
+            'target_language': target_language,
+            **note.to_dict(),
+        })
+    except TranslationConfigurationError as exc:
+        return jsonify({'error': str(exc)}), 503
+    except TranslationProviderError as exc:
+        return jsonify({'error': str(exc)}), 502
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'error': str(exc)}), 500
 
 @note_bp.route('/notes/<int:note_id>', methods=['PUT'])
 def update_note(note_id):
