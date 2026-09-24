@@ -3,6 +3,13 @@ from src.models.note import Note, db
 
 note_bp = Blueprint('note', __name__)
 
+
+def _validate_title(title_value):
+    if title_value is None or not str(title_value).strip():
+        raise ValueError('Title is required')
+    return str(title_value).strip()
+
+
 @note_bp.route('/notes', methods=['GET'])
 def get_notes():
     """Get all notes, ordered by most recently updated"""
@@ -16,11 +23,19 @@ def create_note():
         data = request.json
         if not data or 'title' not in data or 'content' not in data:
             return jsonify({'error': 'Title and content are required'}), 400
-        
-        note = Note(title=data['title'], content=data['content'])
+
+        title = _validate_title(data['title'])
+        content = data['content']
+
+        if content is None:
+            return jsonify({'error': 'Title and content are required'}), 400
+
+        note = Note(title=title, content=content)
         db.session.add(note)
         db.session.commit()
         return jsonify(note.to_dict()), 201
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -37,14 +52,24 @@ def update_note(note_id):
     try:
         note = Note.query.get_or_404(note_id)
         data = request.json
-        
+
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
-        note.title = data.get('title', note.title)
-        note.content = data.get('content', note.content)
+
+        if 'title' not in data:
+            return jsonify({'error': 'Title is required'}), 400
+
+        title = _validate_title(data.get('title', note.title))
+        content = data.get('content', note.content)
+        if content is None:
+            return jsonify({'error': 'Content is required'}), 400
+
+        note.title = title
+        note.content = content
         db.session.commit()
         return jsonify(note.to_dict())
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
